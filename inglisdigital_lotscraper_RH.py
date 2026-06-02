@@ -162,10 +162,16 @@ async def open_accordion(page, accordion_id, wait_selector=None):
     await toggle.evaluate("el => el.click()")
 
     if wait_selector:
+        # Scope EACH comma-separated selector to #{accordion_id}. Without this,
+        # only the first selector is scoped and any others match document-wide
+        # — that caused wait_for_selector to time out at 6s on every lot when
+        # passed ".arion-report, p.rem0", silently slowing the scrape.
+        scoped = ", ".join(
+            f"#{accordion_id} {part.strip()}"
+            for part in wait_selector.split(",")
+        )
         try:
-            await page.wait_for_selector(
-                f"#{accordion_id} {wait_selector}", timeout=6000
-            )
+            await page.wait_for_selector(scoped, timeout=6000)
         except Exception:
             pass
     else:
@@ -180,6 +186,10 @@ async def open_accordion(page, accordion_id, wait_selector=None):
 
 def clean_whitespace(text):
     """Collapse excessive whitespace while keeping paragraph breaks."""
+    # Normalise non-breaking spaces — Playwright's inner_text() returns \xa0
+    # between paragraphs on the Inglis pedigree page; left in, they bloat
+    # the CSV with invisible characters and trip up downstream text matching.
+    text = text.replace("\xa0", " ")
     text = re.sub(r"\r\n|\r", "\n", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     text = re.sub(r"[ \t]{2,}", " ", text)
@@ -293,9 +303,16 @@ async def extract_pedigree(page):
     if sire_match:
         text["sire_stats"] = clean_whitespace(sire_match.group(1))
 
-    # Dam narratives → text (1st dam, 2nd dam, 3rd dam, 4th dam)
+    # Dam narratives → text (1st dam, 2nd dam, 3rd dam, 4th dam).
+    # NOTE: Playwright's inner_text() on the Inglis pedigree page returns
+    # headings concatenated directly with content (e.g. "1st damOSTREIDAE,
+    # by Pierro...") — no newline, no space between them. Paragraphs are
+    # separated only by \xa0 (non-breaking space). The earlier `\s*\n`
+    # requirement between heading and content therefore matched nothing and
+    # silently produced empty dam fields for every lot. clean_whitespace()
+    # normalises the \xa0 → space on the captured content.
     dam_sections = re.findall(
-        r"(\d(?:st|nd|rd|th) dam)\s*\n(.*?)(?=\d(?:st|nd|rd|th) dam|Race Record:|\Z)",
+        r"(\d(?:st|nd|rd|th) dam)(.*?)(?=\d(?:st|nd|rd|th) dam|Race Record:|\Z)",
         full_text,
         re.DOTALL,
     )
@@ -303,9 +320,15 @@ async def extract_pedigree(page):
         key = label.replace(" ", "_").lower()  # "1st_dam", "2nd_dam", etc.
         text[key] = clean_whitespace(content)
 
-    # Race record summary line at bottom of pedigree → text
+    # Race record summary line at bottom of pedigree → text.
+    # Same upstream issue as dam sections — no newline between the
+    # "Race Record:" label and its content. End boundary is either a blank
+    # line (where the Arion copyright block starts) or the literal
+    # "All pedigrees" phrase that always follows on this page.
     rr_match = re.search(
-        r"Race Record:\s*\n(.*?)(?:\n\n|\Z)", full_text, re.DOTALL
+        r"Race Record:\s*(.*?)(?=\n\s*\n|All pedigrees|\Z)",
+        full_text,
+        re.DOTALL,
     )
     if rr_match:
         text["pedigree_race_record_summary"] = clean_whitespace(rr_match.group(1))
