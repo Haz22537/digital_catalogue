@@ -46,6 +46,7 @@ files remain compatible with anything else built around that shape.
 import argparse
 import csv
 import sys
+from collections import Counter
 
 from sale_codes import stats_path, manifest_RA_path, manifest_RA_unraced_path
 
@@ -107,6 +108,15 @@ def in_scope_category(row: dict) -> bool:
     return cat in RACEABLE_CATEGORIES
 
 
+# Category codes seen across the 13-month back catalogue (Jul 2025 - Aug 2026).
+# Anything NOT in this set is genuinely new and gets called out loudly — a
+# silent drop is how a whole class of lot disappears from the guide without
+# anyone noticing. NOM, SB, S and U all appeared partway through the window.
+KNOWN_CATEGORIES = {
+    "2YO", "RH", "RF", "RS", "B", "Y", "W", "SH", "SB", "S", "U", "NOM",
+}
+
+
 def is_raced(row: dict) -> bool:
     """True if the horse has at least one recorded run."""
     return parse_int(row.get("total_runs")) > 0
@@ -146,12 +156,37 @@ def convert(sale: str) -> None:
     write_manifest(raced,   dst_raced)
     write_manifest(unraced, dst_unraced)
 
+    # ── Category accounting ──────────────────────────────────────────
+    # The whitelist is deliberately conservative, but a silent drop means a
+    # new category could vanish from the guide unnoticed. Report what was
+    # dropped, and separate "known and intentionally excluded" from "never
+    # seen before, go and look at it".
+    dropped_tally = Counter(
+        (r.get("category") or "").strip().upper() or "(blank)"
+        for r in rows if not in_scope_category(r)
+    )
+    unknown = {c: n for c, n in dropped_tally.items()
+               if c not in KNOWN_CATEGORIES and c != "(blank)"}
+
     print(f"\n📂 {src}")
     print(f"   {len(rows)} total rows")
     print(f"   {out_of_scope} dropped (out-of-scope category)")
+    if dropped_tally:
+        detail = ", ".join(f"{c}={n}" for c, n in dropped_tally.most_common())
+        print(f"     dropped breakdown: {detail}")
     print(f"   {len(in_scope)} in-scope (RH/RF/2YO)")
     print(f"     → {len(raced):>3} raced   written to {dst_raced}")
     print(f"     → {len(unraced):>3} unraced written to {dst_unraced}")
+
+    if unknown:
+        print(f"\n   {'!' * 60}")
+        print(f"   !! UNRECOGNISED CATEGORY CODE(S): "
+              f"{', '.join(f'{c} ({n} lots)' for c, n in unknown.items())}")
+        print(f"   !! These were dropped by the whitelist. If any of them are")
+        print(f"   !! raceable, add them to RACEABLE_CATEGORIES above and re-run.")
+        print(f"   !! Either way add them to KNOWN_CATEGORIES so this stops firing.")
+        print(f"   {'!' * 60}")
+
     print(f"\n   Review both files before running the RA scrape scripts.")
 
 

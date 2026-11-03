@@ -9,8 +9,8 @@ Joined on: lot_id (sale_slug + lot number, e.g. "2026-march-early-online-sale_4"
 Usage
 -----
   Non-interactive (preferred):
-      python inglisdigital_lotscraper.py --sale 2026-05B
-      python inglisdigital_lotscraper.py --sale 2026-05B --start 30 --end 80
+      python inglisdigital_lotscraper_RH.py --sale 2026-05B
+      python inglisdigital_lotscraper_RH.py --sale 2026-05B --start 30 --end 80
 
   Interactive (legacy fallback when --sale omitted):
       python inglisdigital_lotscraper.py

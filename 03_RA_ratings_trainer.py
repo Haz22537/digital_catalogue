@@ -42,9 +42,14 @@ Resume behaviour
 ----------------
 Output is written and flushed incrementally after every row — the same
 pattern as Phase 1. If the script dies mid-run, rows already written are
-preserved. Re-running will reuse any row whose Lot already has a rating or
-trainer in the output file. To retry a failed row, delete it from the
-output CSV and re-run.
+preserved. Re-running skips any Lot already present in the output file,
+whether it was enriched or written blank by the dam_match gate. To retry a
+failed row, delete it from the output CSV and re-run.
+
+(Earlier versions only treated a row as done if it had a trainer or rating,
+so dam-gate-skipped rows were re-appended on every resume and the file grew
+duplicates. merge_and_split.py de-duplicates on lot with keep="last", which
+hid the symptom.)
 """
 
 import argparse
@@ -165,15 +170,29 @@ def main(sale: str) -> None:
     output_cols = list(rows[0].keys()) + [c for c in NEW_COLS if c not in rows[0]]
 
     # ── Resume: load any rows already written ──────────────────────
+    # Resume state.
+    #
+    # Every lot already present in the output is recorded, NOT just the ones
+    # that came back enriched. Rows skipped by the dam_match gate are written
+    # with blank enrichment columns and have neither trainer_name nor Rating —
+    # keying on those meant such rows were never counted as "done" and were
+    # re-appended on every resume, duplicating steadily. The duplicates were
+    # invisible downstream because merge_and_split.py de-duplicates on lot with
+    # keep="last", so this only ever showed up as a slowly growing CSV.
     prior: dict[str, dict] = {}
     if Path(output_path).exists():
         with open(output_path, newline="", encoding="utf-8") as f:
             for r in csv.DictReader(f):
                 lot = (r.get("Lot") or "").strip()
-                if lot and (r.get("trainer_name") or r.get("Rating")):
+                if lot:
                     prior[lot] = r
         if prior:
-            print(f"📦 Resuming: {len(prior)} rows already enriched in {output_path}")
+            enriched = sum(
+                1 for r in prior.values()
+                if (r.get("trainer_name") or r.get("Rating"))
+            )
+            print(f"📦 Resuming: {len(prior)} rows already in {output_path} "
+                  f"({enriched} enriched, {len(prior) - enriched} skipped/blank)")
 
     counts = {
         "fetched": 0, "cached": 0, "failed": 0,

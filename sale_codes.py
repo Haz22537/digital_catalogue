@@ -84,10 +84,6 @@ def ra_urls_path(sale: str) -> str:
     """Phase 1 output — horse URLs from Racing Australia."""
     return f"{sale}_RA_urls.csv"
 
-def ra_urls_path(sale: str) -> str:
-    """Phase 1 output — horse URLs from Racing Australia."""
-    return f"{sale}_RA_urls.csv"
-
 def ra_ratings_path(sale: str) -> str:
     """Phase 2 output — final RA-enriched data."""
     return f"{sale}_RA_ratings.csv"

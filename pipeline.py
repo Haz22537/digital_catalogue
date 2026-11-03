@@ -9,6 +9,7 @@ everything that went wrong in one place.
 """
 
 import csv
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -18,6 +19,13 @@ from sale_codes import failures_path
 FAILURE_FIELDS = [
     "timestamp", "phase", "lot", "horse_name", "status", "fail_reason",
 ]
+
+# Inglis Digital now explicitly suffixes Australian-bred horses with "(AUS)";
+# previously the absence of a suffix implied AUS. Racing Australia never shows
+# a country code for AUS-bred horses — only for imports. So "(AUS)" must be
+# stripped before comparing, while all other suffixes (NZ, GB, USA, IRE, ...)
+# are left intact because both sources agree on those.
+_AUS_SUFFIX_RE = re.compile(r"\s*\(\s*AUS\s*\)\s*$", re.IGNORECASE)
 
 
 def log_failure(
@@ -49,8 +57,14 @@ def log_failure(
 def normalize_dam(name: str | None) -> str:
     """Case-fold + whitespace-collapse for dam-name comparison.
 
-    Country suffixes (e.g. '(USA)') are intentionally NOT stripped — Inglis and
-    RA agree on suffix presence, so stripping would mask genuine mismatches.
+    A trailing '(AUS)' suffix IS stripped: Inglis Digital started tagging
+    Australian-bred horses explicitly, but Racing Australia only ever shows
+    country codes for imports, so the suffix is a formatting difference rather
+    than a genuine mismatch.
+
+    All other country suffixes (e.g. '(NZ)', '(USA)') are intentionally NOT
+    stripped — Inglis and RA agree on those, so stripping would mask genuine
+    mismatches.
     """
-    import re
-    return re.sub(r"\s+", " ", (name or "").strip().lower())
+    cleaned = _AUS_SUFFIX_RE.sub("", (name or "").strip())
+    return re.sub(r"\s+", " ", cleaned.strip().lower())

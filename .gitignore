@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+
+# Node
+node_modules/
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+credentials*.json
+.claude/settings.local.json
+
+# Browser profiles
+chrome_profile/
+*_profile/
+
+# Databases
+*.duckdb
+*.duckdb.wal
+*.sqlite
+*.db
+
+# Editor / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+~$*
+
+# Per-sale output folders and data files
+[0-9][0-9][A-Z]/
+*.csv
+*.xlsx
+*_html.txt
